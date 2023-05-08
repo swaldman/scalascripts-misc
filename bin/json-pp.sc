@@ -1,8 +1,8 @@
 #!/usr/bin/env -S scala-cli shebang
 
-//> using scala "3.2.1"
-//> using lib "io.circe::circe-core:0.14.3"
-//> using lib "io.circe::circe-parser:0.14.3"
+//> using scala "3.2.2"
+//> using lib "io.circe::circe-core:0.14.5"
+//> using lib "io.circe::circe-parser:0.14.5"
 //> using lib "com.mchange:mchange-commons-java:0.2.20"
 
 import io.circe._
