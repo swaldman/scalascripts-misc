@@ -1,0 +1,42 @@
+#!/usr/bin/env -S scala-cli shebang
+
+//> using scala "3.2.2"
+//> using lib "org.apache.pdfbox:pdfbox:2.0.28"
+
+import java.io.File
+import Console.{RESET,RED,GREEN,UNDERLINED}
+import org.apache.pdfbox.multipdf.PDFMergerUtility 
+
+def usage = "Usage: pdfcat <first>.pdf <second>.pdf ... <destfile>.pdf"
+
+def atLeastThreeArgs = args.length >= 3
+def allDotPdf        = args.forall( _.endsWith(".pdf") )
+
+def abort(why : String) = 
+  Console.err.println(s"${RESET}${RED}${UNDERLINED}ABORTED: ${why}${RESET}")
+  Console.err.println()
+  Console.err.println(usage)
+  System.exit(1)
+
+if !atLeastThreeArgs then abort("pdfcat requires at least three arguments, at least two PDF files to concatenate and a destination file.")
+if !allDotPdf then abort("pdfcat requires that all filenames (inclinding the destination file) end in '.pdf'.")
+
+val files = args.map(fn => new File(fn))
+
+def allSourceFilesExistAndAreReadable = files.init.forall( f => f.exists() && f.canRead() )
+def destinationDoesNotExist           = !files.last.exists()
+
+if !allSourceFilesExistAndAreReadable then abort("At least one source file does not exist or is not readable.")
+if !destinationDoesNotExist then abort(s"Destination file '${args.last}' already exists. Please delete to regenerate.")
+
+val merger = new PDFMergerUtility();
+merger.setDestinationFileName(args.last)
+files.init.foreach( merger.addSource )
+merger.mergeDocuments()
+
+Console.err.println(s"${RESET}${GREEN}PDF file '${args.last}' created.${RESET}")
+
+
+
+
+
