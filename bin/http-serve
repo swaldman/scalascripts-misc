@@ -1,0 +1,36 @@
+#!/usr/bin/env -S scala-cli shebang
+
+//> using scala "3.2.2"
+//> using lib "com.lihaoyi::cask:0.9.1"
+//> using lib "com.monovore::decline:2.4.1"
+//> using option "-deprecation"
+
+import com.monovore.decline._
+import cats.syntax.all.catsSyntaxTuple3Semigroupal
+
+val host = Opts.option[String]("host", short = "h", metavar = "hostname or IP", help = "The host to bind to, serve from.").withDefault("localhost")
+val port = Opts.option[Int]("port", short = "p", metavar = "portnum", help = "The port to serve from").withDefault(8080)
+val dir  = Opts.option[String]("dir", short = "d", metavar = "directory", help = "The directory to serve from.").withDefault(".")
+
+val hostPortDir = (host, port, dir).tupled
+
+val command = Command( name = "http-serve", header = "Serve static files from a directory")( hostPortDir )
+
+class Server( override val host : String, override val port : Int, dir : String) extends cask.MainRoutes:
+  @cask.staticFiles("/")
+  def staticFileRoutes() = dir
+
+  initialize()
+end Server
+
+command.parse(args.toIndexedSeq) match
+  case Left(help) =>
+    println(help)
+    System.exit(1)
+  case Right( ( host, port, dir ) ) =>
+    val server = new Server(host, port, dir)
+    server.main(Array.empty)
+    println(s"Now serving from host '${host}' on port ${port}, for directory '${dir}'.")
+
+
+
