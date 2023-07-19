@@ -30,6 +30,7 @@ def pathJoin( a : String, b : String ) : String =
   val normB = if b.head == '/' then b.tail else b
   s"${normA}/${normB}"
 
+// the return value will become the exit code of our script
 def post( config : Config ) : Int =
   val statusEndpoint      = pathJoin( config.url, "api/v1/statuses/" )
   val headers             = Map (
@@ -37,20 +38,22 @@ def post( config : Config ) : Int =
     "Content-Type"  ->  "application/x-www-form-urlencoded",
   )
   val formData = s"""status=${URLEncoder.encode(config.text, "UTF-8")}"""
-  
+
+  // we catch failures resulting from bad status codes, rather than just
+  // fail with exception, so we can print more informative errors
   val response =
     try requests.post( statusEndpoint, data=formData, headers=headers )
     catch
-      case rfe : requests.RequestFailedException => rfe.response // let's see the bad status code and deal with it
+      case rfe : requests.RequestFailedException => rfe.response
       
-  if config.verbose then pprint.pprintln( response )
+  if config.verbose then System.err.println( pprint( response ) )
   if response.statusCode == 200 then
-    if config.verbose then println("Post succeeded.")
+    if config.verbose then System.err.println("Post succeeded.")
     0 // good exit code
   else
     val rt = response.text()
     val rtPart = if rt.isEmpty then "no response text." else s"response text: ${response.text()}"
-    println(s"Attempt to post failed! Status code ${response.statusCode}, ${rtPart}")
+    System.err.println(s"Attempt to post failed! Status code ${response.statusCode}, ${rtPart}")
     9 // arbitrary bad exit code
 
 val command = Command(name="mastopost", header="Posts toots to Mastodon.")( allOpts )
