@@ -1,0 +1,71 @@
+#!/usr/bin/env -S scala-cli shebang
+
+// inspired by Roy Tang, https://roytang.net/2021/11/mastodon-api-python/
+
+//> using scala "3.3.0"
+//> using dep "com.lihaoyi::requests:0.8.0"
+//> using dep "com.lihaoyi::pprint:0.7.0"
+//> using dep "com.monovore::decline:2.4.1"
+
+import java.net.URLEncoder
+
+import com.monovore.decline.*
+import cats.implicits.*        // for mapN
+
+case class Config( text : String, url : String, accessToken : String, images : List[String], verbose : Boolean)
+
+val urlHelp = "The URL of the instance to which you wish to post."
+val accessTokenHelp = "The access token to authenticate under."
+
+val text    = Opts.option[String] ("text",         short="t", help="The text of your toot.")
+val url     = Opts.option[String] ("url",          short="u", help=urlHelp)                  orElse Opts.env[String]("MASTO_INSTANCE_URL", help=urlHelp)
+val token   = Opts.option[String] ("access-token", short="a", help=accessTokenHelp)          orElse Opts.env[String]("MASTO_ACCESS_TOKEN", help=accessTokenHelp)
+
+val images  = Opts.options[String]("image", help = "The file or URL of images to attach.").orEmpty
+val verbose = Opts.flag("verbose", help="Print more information to the console.").orFalse
+val allOpts = (text, url, token, images, verbose).mapN( ( t, u, at, i, v) => Config(t,u,at,i,v) ) // a bit annoying
+
+def pathJoin( a : String, b : String ) : String =
+  val normA = if a.last == '/' then a.init else a
+  val normB = if b.head == '/' then b.tail else b
+  s"${normA}/${normB}"
+
+def post( config : Config ) : Int =
+  val statusEndpoint      = pathJoin( config.url, "api/v1/statuses/" )
+  val headers             = Map (
+    "Authorization" -> s"Bearer ${config.accessToken}",
+    "Content-Type"  ->  "application/x-www-form-urlencoded",
+  )
+  val formData = s"""status=${URLEncoder.encode(config.text, "UTF-8")}"""
+  
+  val response =
+    try requests.post( statusEndpoint, data=formData, headers=headers )
+    catch
+      case rfe : requests.RequestFailedException => rfe.response // let's see the bad status code and deal with it
+      
+  if config.verbose then pprint.pprintln( response )
+  if response.statusCode == 200 then
+    if config.verbose then println("Post succeeded.")
+    0 // good exit code
+  else
+    val rt = response.text()
+    val rtPart = if rt.isEmpty then "no response text." else s"response text: ${response.text()}"
+    println(s"Attempt to post failed! Status code ${response.statusCode}, ${rtPart}")
+    9 // arbitrary bad exit code
+
+val command = Command(name="mastopost", header="Posts toots to Mastodon.")( allOpts )
+
+command.parse(args.toIndexedSeq, sys.env) match
+  case Left(help) =>
+    println(help)
+    System.exit(1)
+  case Right( config ) =>
+    val exitCode = post( config )
+    System.exit(exitCode)
+
+
+
+
+
+
+
