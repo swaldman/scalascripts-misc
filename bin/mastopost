@@ -23,7 +23,7 @@ val token   = Opts.option[String] ("access-token", short="a", help=accessTokenHe
 
 val images  = Opts.options[String]("image", help = "The file or URL of images to attach.").orEmpty
 val verbose = Opts.flag("verbose", help="Print more information to the console.").orFalse
-val allOpts = (text, url, token, images, verbose).mapN( ( t, u, at, i, v) => Config(t,u,at,i,v) ) // a bit annoying
+val allOpts = (text, url, token, images, verbose).mapN( (t, u, at, i, v) => Config(t,u,at,i,v) ) // a bit annoying
 
 def pathJoin( a : String, b : String ) : String =
   val normA = if a.last == '/' then a.init else a
