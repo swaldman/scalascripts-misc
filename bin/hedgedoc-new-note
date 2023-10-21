@@ -1,0 +1,78 @@
+#!/usr/bin/env -S scala-cli shebang
+
+//> using scala "3.3.1"
+//> using dep "com.lihaoyi::requests:0.8.0"
+//> using dep "com.lihaoyi::pprint:0.7.0"
+//> using dep "com.monovore::decline:2.4.1"
+//> using dep "com.mchange::codegenutil:0.0.2"
+
+import com.mchange.codegenutil.increaseIndent
+
+import java.net.URLEncoder
+
+import com.monovore.decline.*
+import cats.implicits.* // for mapN
+
+case class Config(url: String, email: String, password: String, id: String, markdown : String, verbose : Boolean)
+
+def newNote( cfg : Config ) : Either[String,Unit] =
+  val session = requests.Session()
+  val loginResponse =
+    session.post(
+      "https://notes.interfluidity.com/login",
+      data=Map("email"->cfg.email,"password"->cfg.password),
+      check=false
+    )
+  if cfg.verbose then
+    System.err.println("Login response -->")
+    System.err.println(increaseIndent(4)(pprint(loginResponse).plainText))
+  val createResponse =
+    session.post(s"https://notes.interfluidity.com/new/${URLEncoder.encode(cfg.id)}", data=cfg.markdown, maxRedirects=0, check=false)
+  if cfg.verbose then
+    System.err.println("Create response -->")
+    System.err.println(increaseIndent(4)(pprint(createResponse).plainText))
+  createResponse.statusCode match
+    case 302 => Right( () ) // this is what we expect if it worked, it tries to redirect
+    case 409 => Left(s"It appears that note '${cfg.id}' already exists.")
+    case _   => Left(createResponse.statusMessage)
+
+val initialMarkdown = "# new note" // maybe later I'll deal with this more nicely
+
+val urlHelp = "The URL of the hedgedoc instance on which you'll create a note."
+val emailHelp = "Email of the hedgedoc user who will own the note."
+val passwordHelp = "Password of the hedgedoc user who will own the note."
+
+val url = Opts.option[String] ("url", short="u", help=urlHelp) orElse Opts.env[String]("HEDGEDOC_URL", help=urlHelp)
+val email = Opts.option[String] ("email", short="e", help=emailHelp) orElse Opts.env[String]("HEDGEDOC_EMAIL", help=emailHelp)
+val password = Opts.option[String] ("password", short="p", help=passwordHelp) orElse Opts.env[String]("HEDGEDOC_PASSWORD", help=passwordHelp)
+val noteId = Opts.argument[String](metavar = "note-id")
+val verbose = Opts.flag("verbose", help="Print more information to the console.").orFalse
+
+val allOpts = (url, email, password, noteId, verbose).mapN( (u,e,p,n,v) => Config(u, e, p, n, initialMarkdown, v) )
+
+val command = Command(name="hedgedoc-new-note", header="Creates a new hedgedoc note.")( allOpts )
+
+command.parse(args.toIndexedSeq, sys.env) match
+  case Left(help) =>
+    println(help)
+    System.exit(1)
+  case Right( config ) =>
+    newNote( config ) match
+      case Left( oopsie ) =>
+        System.err.println(s"The attempt to create a new note FAILED: " + oopsie)
+        System.exit(2)
+      case Right(_) =>
+        System.err.println(s"Note '${config.id}' created.")
+        System.exit(0)
+        
+
+
+
+
+
+
+
+
+
+
+
