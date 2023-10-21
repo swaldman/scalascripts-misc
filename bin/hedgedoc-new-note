@@ -16,10 +16,12 @@ import cats.implicits.* // for mapN
 case class Config(url: String, email: String, password: String, id: String, markdown : String, verbose : Boolean)
 
 def newNote( cfg : Config ) : Either[String,Unit] =
+  val stdurl =
+    if cfg.url.endsWith("/") then cfg.url.init else cfg.url
   val session = requests.Session()
   val loginResponse =
     session.post(
-      "https://notes.interfluidity.com/login",
+      s"${stdurl}/login",
       data=Map("email"->cfg.email,"password"->cfg.password),
       check=false
     )
@@ -27,7 +29,7 @@ def newNote( cfg : Config ) : Either[String,Unit] =
     System.err.println("Login response -->")
     System.err.println(increaseIndent(4)(pprint(loginResponse).plainText))
   val createResponse =
-    session.post(s"https://notes.interfluidity.com/new/${URLEncoder.encode(cfg.id)}", data=cfg.markdown, maxRedirects=0, check=false)
+    session.post(s"${stdurl}/new/${URLEncoder.encode(cfg.id)}", data=cfg.markdown, maxRedirects=0, check=false)
   if cfg.verbose then
     System.err.println("Create response -->")
     System.err.println(increaseIndent(4)(pprint(createResponse).plainText))
