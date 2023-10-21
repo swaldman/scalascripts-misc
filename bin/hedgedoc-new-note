@@ -23,6 +23,7 @@ def newNote( cfg : Config ) : Either[String,Unit] =
     session.post(
       s"${stdurl}/login",
       data=Map("email"->cfg.email,"password"->cfg.password),
+      maxRedirects=0,
       check=false
     )
   if cfg.verbose then
