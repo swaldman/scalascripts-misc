@@ -1,0 +1,25 @@
+#!/usr/bin/env -S scala-cli shebang
+
+//> using dep "com.lihaoyi::os-lib:0.9.2"
+
+def carefulDeleteOut( putativeParent : os.Path ) =
+   val outDir = putativeParent / "out"
+   if os.exists( outDir ) then
+     val contents = os.list( outDir )
+     val looksLikeMillOutDir = contents.map( _.segments.toVector.last ).find( _.startsWith("mill") ).nonEmpty
+     if looksLikeMillOutDir then
+       os.remove.all(outDir)
+     else
+       System.err.println(s"'${outDir}' doesn't look like a mill out dir, won't remove. (Doesn't contain entries beginning with 'mill'.)")
+   else
+     System.err.println(s"'${outDir}' doesn't exist, can't remove.")
+
+def touch( target : os.Path ) =
+  target.toIO.setLastModified( System.currentTimeMillis() )
+
+def touchAllMillBuildFiles( putativeParent : os.Path ) =
+  os.walk( putativeParent, skip = (p => !p.toString().endsWith("build.sc") ) ).foreach( touch )
+
+val wd = os.pwd
+carefulDeleteOut( wd )
+touchAllMillBuildFiles( wd )
