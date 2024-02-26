@@ -1,0 +1,30 @@
+#!/usr/bin/env -S scala-cli shebang
+
+//> using scala "3.3.1"
+//> using dep "com.lihaoyi::os-lib:0.9.3"
+
+val EliminateLicenseHeaderRegex = """(?s)^\s*\/\*.*?\*\/\s+""".r
+
+def eliminateLicenseHeader( s : String ) : String = EliminateLicenseHeaderRegex.replaceFirstIn( s, "" )
+
+def eliminateLicenseHeaderInPlace( p : os.Path ) : Unit =
+  val s = os.read(p)
+  os.write.over( p, eliminateLicenseHeader(s) )
+  println( "Processed " + p )
+
+def isCandidate( p : os.Path ) : Boolean =
+  val pstr = p.toString
+  pstr.endsWith(".scala") || pstr.endsWith(".java")
+
+
+if (args.size != 1)
+  System.err.println("Usage: eliminate-license-headers <file.java | file.scala | parent-dir>")
+else
+  val path = os.Path( args(0), base = os.pwd )
+  val pathStr = path.toString()
+  if os.isDir(path) then
+    os.walk(path).filter( isCandidate ).foreach( eliminateLicenseHeaderInPlace )
+  else if isCandidate(path) then
+    eliminateLicenseHeaderInPlace(path)
+  else
+    System.err.println( "Unsupported path. Cannot eliminate license header from " + path )
