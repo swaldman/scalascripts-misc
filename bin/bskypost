@@ -1,0 +1,102 @@
+#!/usr/bin/env -S scala-cli shebang
+
+// see https://docs.bsky.app/docs/api/com-atproto-server-create-session
+//     https://docs.bsky.app/docs/advanced-guides/posts
+
+//> using scala "3.3.4"
+//> using dep "com.lihaoyi::requests:0.9.0"
+//> using dep "com.lihaoyi::pprint:0.9.0"
+//> using dep "com.lihaoyi::upickle:4.0.2"
+//> using dep "com.monovore::decline:2.5.0"
+//> using dep "com.mchange::conveniences:0.0.5"
+
+import java.io.{BufferedInputStream, InputStream}
+import java.net.{URL,URLEncoder}
+import java.nio.file.*
+
+import java.time.Instant
+import java.time.format.DateTimeFormatter.ISO_INSTANT
+
+import com.mchange.conveniences.string.*
+
+import scala.util.Using
+
+import com.monovore.decline.*
+import cats.implicits.*        // for mapN
+
+case class Config( serviceEndpoint : String, id : String, appPassword : String, text : String, verbose : Boolean)
+
+val DefaultServiceEndpoint = "https://bsky.social/"
+
+val identifierHelp = "Handle or other supported identifier under which you intend to post."
+val appPasswordHelp = "A valid app-password to authenticate for the given did."
+
+val identifier  = Opts.option[String] ("identifier",   short="i", help=identifierHelp)
+val appPassword = Opts.option[String] ("app-password",            help=appPasswordHelp) orElse Opts.env[String]("BSKY_APP_PASSWORD", help=appPasswordHelp)
+val text        = Opts.option[String] ("text",         short="t", help="The text of your toot.")
+
+val verbose = Opts.flag("verbose", help="Print more information to the console.").orFalse
+
+val allOpts = (identifier, appPassword, text, verbose).mapN( (id, a, t, v) => Config(DefaultServiceEndpoint, id, a, t, v) )
+
+def auth( config : Config ) : ujson.Obj =
+  val req = ujson.Obj("identifier" -> config.id, "password" -> config.appPassword)
+  if config.verbose then System.err.println( pprint( req ) )
+  val url = pathJoin( config.serviceEndpoint, "/xrpc/com.atproto.server.createSession" )
+  val response = requests.post( url, data=req, headers=Map("Content-Type"->"application/json") )
+  ujson.read( response.text() ).obj
+
+// the return value will become the exit code of our script
+def post( config : Config, session : ujson.Obj ) : Int =
+  val url = pathJoin( config.serviceEndpoint, "/xrpc/com.atproto.repo.createRecord" )
+  val post = ujson.Obj("$type" -> "app.bsky.feed.post", "text" -> config.text, "createdAt" -> ISO_INSTANT.format(Instant.now()))
+  val headers             = Map (
+    "Authorization" -> s"""Bearer ${session("accessJwt").str}""",
+    "Content-Type"  ->  "application/json",
+  )
+
+  val jsonData =
+    ujson.Obj(
+      "repo" -> session("did"),
+      "collection" -> "app.bsky.feed.post",
+      "record" -> post,
+    )
+
+  if config.verbose then System.err.println( pprint( headers ) )
+  if config.verbose then System.err.println( pprint( jsonData ) )
+
+  // we catch failures resulting from bad status codes, rather than just
+  // fail with exception, so we can print more informative errors
+  val response =
+    try requests.post( url, data=jsonData, headers=headers )
+    catch
+      case rfe : requests.RequestFailedException => rfe.response
+
+  if config.verbose then System.err.println( pprint( response ) )
+  if response.statusCode == 200 then
+    if config.verbose then System.err.println("Post succeeded.")
+    0 // good exit code
+  else
+    val rt = response.text()
+    val rtPart = if rt.isEmpty then "no response text." else s"response text: ${response.text()}"
+    System.err.println(s"Attempt to post failed! Status code ${response.statusCode}, ${rtPart}")
+    9 // arbitrary bad exit code
+
+val command = Command(name="bskypost", header="Posts to BlueSky.")( allOpts )
+
+command.parse(args.toIndexedSeq, sys.env) match
+  case Left(help) =>
+    println(help)
+    System.exit(1)
+  case Right( config ) =>
+    val session = auth( config )
+    if config.verbose then System.err.println( pprint( session ) )
+    val exitCode = post( config, session )
+    System.exit(exitCode)
+
+
+
+
+
+
+
