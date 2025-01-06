@@ -6,7 +6,7 @@
 //> using scala "3.3.4"
 //> using dep "com.lihaoyi::requests:0.9.0"
 //> using dep "com.lihaoyi::pprint:0.9.0"
-//> using dep "com.lihaoyi::upickle:4.0.2"
+//> using dep "com.lihaoyi::ujson:4.0.2"
 //> using dep "com.monovore::decline:2.5.0"
 //> using dep "com.mchange::conveniences:0.0.5"
 
@@ -17,16 +17,18 @@ import java.nio.file.*
 import java.time.Instant
 import java.time.format.DateTimeFormatter.ISO_INSTANT
 
-import com.mchange.conveniences.string.*
+import scala.collection.mutable
 
-import scala.util.Using
+import com.mchange.conveniences.string.*
 
 import com.monovore.decline.*
 import cats.implicits.*        // for mapN
 
-case class Config( serviceEndpoint : String, id : String, appPassword : String, text : String, verbose : Boolean)
-
 val DefaultServiceEndpoint = "https://bsky.social/"
+
+val UrlRegex = "(?i)\\b(?:(?:https?|ftp)://)(?:\\S+(?::\\S*)?@)?(?:(?!(?:10|127)(?:\\.\\d{1,3}){3})(?!(?:169\\.254|192\\.168)(?:\\.\\d{1,3}){2})(?!172\\.(?:1[6-9]|2\\d|3[0-1])(?:\\.\\d{1,3}){2})(?:[1-9]\\d?|1\\d\\d|2[01]\\d|22[0-3])(?:\\.(?:1?\\d{1,2}|2[0-4]\\d|25[0-5])){2}(?:\\.(?:[1-9]\\d?|1\\d\\d|2[0-4]\\d|25[0-4]))|(?:(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)(?:\\.(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)*(?:\\.(?:[a-z\\u00a1-\\uffff]{2,}))\\.?)(?::\\d{2,5})?(?:[/?#]\\S*)?\\b".r // taken from https://stackoverflow.com/questions/31440758/perfect-url-validation-regex-in-java
+
+case class Config( serviceEndpoint : String, id : String, appPassword : String, text : String, verbose : Boolean)
 
 val identifierHelp = "Handle or other supported identifier under which you intend to post."
 val appPasswordHelp = "A valid app-password to authenticate for the given did."
@@ -46,15 +48,38 @@ def auth( config : Config ) : ujson.Obj =
   val response = requests.post( url, data=req, headers=Map("Content-Type"->"application/json") )
   ujson.read( response.text() ).obj
 
+def utf8IndexFor( s : String, si : Int ) : Int = s.substring(0,si).getBytes(java.nio.charset.StandardCharsets.UTF_8).length
+
+def urlFacets( text : String ) : ujson.Arr =
+  val buff = mutable.ArrayBuffer.empty[ujson.Value]
+  val matches = UrlRegex.findAllMatchIn( text )
+  matches.foreach: m =>
+    //val s = m.group(0)
+    //println( s"s: $s" )
+    //println( s"s.length: ${s.length}" )
+    //println( s"m.start(0): ${m.start(0)}" )
+    //println( s"m.end(0): ${m.end(0)}" )
+    val facet =
+      val index = ujson.Obj( "byteStart" -> utf8IndexFor(text, m.start(0)), "byteEnd" -> utf8IndexFor(text, m.end(0)) )
+      val features = ujson.Arr( ujson.Obj( "$type" -> "app.bsky.richtext.facet#link", "uri" -> m.group(0) ) )
+      ujson.Obj( "index" -> index, "features" -> features )
+    buff += facet
+  ujson.Arr(buff)
+
+def facets( text : String ) : ujson.Arr = urlFacets( text : String ) // maybe later i'll deal with mentions
+
 // the return value will become the exit code of our script
 def post( config : Config, session : ujson.Obj ) : Int =
   val url = pathJoin( config.serviceEndpoint, "/xrpc/com.atproto.repo.createRecord" )
-  val post = ujson.Obj("$type" -> "app.bsky.feed.post", "text" -> config.text, "createdAt" -> ISO_INSTANT.format(Instant.now()))
+  val post =
+    val lhm = upickle.core.LinkedHashMap.apply[String,ujson.Value]("$type" -> ujson.Str("app.bsky.feed.post") :: "text" -> ujson.Str(config.text) :: "createdAt" -> ujson.Str(ISO_INSTANT.format(Instant.now())) :: Nil )
+    val fs  = facets( config.text )
+    if fs.value.nonEmpty then lhm += ( "facets" -> fs )
+    ujson.Obj(lhm)
   val headers             = Map (
     "Authorization" -> s"""Bearer ${session("accessJwt").str}""",
     "Content-Type"  ->  "application/json",
   )
-
   val jsonData =
     ujson.Obj(
       "repo" -> session("did"),
