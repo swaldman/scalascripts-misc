@@ -106,7 +106,7 @@ def post( config : Config ) : Int =
     try requests.post( statusEndpoint, data=jsonData, headers=headers )
     catch
       case rfe : requests.RequestFailedException => rfe.response
-      
+
   if config.verbose then System.err.println( pprint( response ) )
   if response.statusCode == 200 then
     if config.verbose then System.err.println("Post succeeded.")

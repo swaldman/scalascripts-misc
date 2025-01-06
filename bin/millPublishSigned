@@ -21,13 +21,15 @@ if (sonatypePassword == null) {
 
 val gpgPassphrase = console.readPassword("Please enter GPG passphrase for signing: ")
 
-def millBinary( local : Boolean ) =
-  (if local then "./" else "") + "mill"
+def fileExists( strpath : String ) = {
+  import java.nio.file.{Files,Path}
+  Files.exists( Path.of( strpath ) )
+}
 
-val useLocal = (new java.io.File( millBinary(true) )).exists()
+val millBinary = List("./mill","./millw").find( fileExists ).getOrElse("mill")
 
 val argsPreparsed = Seq(
-  millBinary( useLocal ), "mill.scalalib.PublishModule/publishAll", "__.publishArtifacts",
+  millBinary, "mill.scalalib.PublishModule/publishAll", /* "__.publishArtifacts", */
   "--sonatypeCreds", s"${sonatypeUsername}:${sonatypePassword}",
   "--gpgArgs", s"--passphrase=${new String(gpgPassphrase)},--batch,--yes,-a,-b,--no-tty,--pinentry-mode=loopback",
   "--release", "false"
