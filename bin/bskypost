@@ -52,30 +52,25 @@ def auth( config : Config ) : ujson.Obj =
 
 def utf8IndexFor( s : String, si : Int ) : Int = s.substring(0,si).getBytes(java.nio.charset.StandardCharsets.UTF_8).length
 
-def urlFacets( config : Config, session : ujson.Obj, text : String ) : mutable.ArrayBuffer[ujson.Value] =
+def urlFacets( config : Config ) : mutable.ArrayBuffer[ujson.Value] =
   val buff = mutable.ArrayBuffer.empty[ujson.Value]
-  val matches = UrlRegex.findAllMatchIn( text )
+  val matches = UrlRegex.findAllMatchIn( config.text )
   matches.foreach: m =>
-    //val s = m.group(0)
-    //println( s"s: $s" )
-    //println( s"s.length: ${s.length}" )
-    //println( s"m.start(0): ${m.start(0)}" )
-    //println( s"m.end(0): ${m.end(0)}" )
     val facet =
-      val index = ujson.Obj( "byteStart" -> utf8IndexFor(text, m.start(0)), "byteEnd" -> utf8IndexFor(text, m.end(0)) )
+      val index = ujson.Obj( "byteStart" -> utf8IndexFor(config.text, m.start(0)), "byteEnd" -> utf8IndexFor(config.text, m.end(0)) )
       val features = ujson.Arr( ujson.Obj( "$type" -> "app.bsky.richtext.facet#link", "uri" -> m.group(0) ) )
       ujson.Obj( "index" -> index, "features" -> features )
     buff += facet
   buff
 
-def mentionFacets( config : Config, session : ujson.Obj, text : String ) : mutable.ArrayBuffer[ujson.Value] =
+def mentionFacets( config : Config ) : mutable.ArrayBuffer[ujson.Value] =
   val buff = mutable.ArrayBuffer.empty[ujson.Value]
-  val matches = MentionRegex.findAllMatchIn( text )
+  val matches = MentionRegex.findAllMatchIn( config.text )
   matches.foreach: m =>
     val handle = m.group(1).substring(1)
     try
       val facet =
-        val index = ujson.Obj( "byteStart" -> utf8IndexFor(text, m.start(1)), "byteEnd" -> utf8IndexFor(text, m.end(1)) )
+        val index = ujson.Obj( "byteStart" -> utf8IndexFor(config.text, m.start(1)), "byteEnd" -> utf8IndexFor(config.text, m.end(1)) )
         val features =
           val resolveHandleEndpoint = pathJoin( config.serviceEndpoint, "/xrpc/com.atproto.identity.resolveHandle" )
           val response = requests.get( resolveHandleEndpoint, params=Map("handle" -> handle), headers=Map("Content-Type"->"application/json") )
@@ -90,14 +85,14 @@ def mentionFacets( config : Config, session : ujson.Obj, text : String ) : mutab
         if config.verbose then System.err.println( s"Failed to lookup handle '${handle}'. Skipping. Error: ${rfe.response}" )
   buff
 
-def facets( config : Config, session : ujson.Obj, text : String ) : ujson.Arr = ujson.Arr( urlFacets( config, session, text ) ++ mentionFacets( config, session, text) )
+def facets( config : Config ) : ujson.Arr = ujson.Arr( urlFacets( config ) ++ mentionFacets( config ) )
 
 // the return value will become the exit code of our script
 def post( config : Config, session : ujson.Obj ) : Int =
   val url = pathJoin( config.serviceEndpoint, "/xrpc/com.atproto.repo.createRecord" )
   val post =
     val lhm = upickle.core.LinkedHashMap.apply[String,ujson.Value]("$type" -> ujson.Str("app.bsky.feed.post") :: "text" -> ujson.Str(config.text) :: "createdAt" -> ujson.Str(ISO_INSTANT.format(Instant.now())) :: Nil )
-    val fs  = facets( config, session, config.text )
+    val fs  = facets( config )
     if fs.value.nonEmpty then lhm += ( "facets" -> fs )
     ujson.Obj(lhm)
   val headers             = Map (
