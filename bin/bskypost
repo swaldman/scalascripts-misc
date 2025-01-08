@@ -28,6 +28,8 @@ val DefaultServiceEndpoint = "https://bsky.social/"
 
 val UrlRegex = "(?i)\\b(?:(?:https?|ftp)://)(?:\\S+(?::\\S*)?@)?(?:(?!(?:10|127)(?:\\.\\d{1,3}){3})(?!(?:169\\.254|192\\.168)(?:\\.\\d{1,3}){2})(?!172\\.(?:1[6-9]|2\\d|3[0-1])(?:\\.\\d{1,3}){2})(?:[1-9]\\d?|1\\d\\d|2[01]\\d|22[0-3])(?:\\.(?:1?\\d{1,2}|2[0-4]\\d|25[0-5])){2}(?:\\.(?:[1-9]\\d?|1\\d\\d|2[0-4]\\d|25[0-4]))|(?:(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)(?:\\.(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)*(?:\\.(?:[a-z\\u00a1-\\uffff]{2,}))\\.?)(?::\\d{2,5})?(?:[/?#]\\S*)?\\b".r // taken from https://stackoverflow.com/questions/31440758/perfect-url-validation-regex-in-java
 
+val MentionRegex = """(?i)(?:$|\W)(@([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)\b""".r // modified from https://docs.bsky.app/docs/advanced-guides/posts
+
 case class Config( serviceEndpoint : String, id : String, appPassword : String, text : String, verbose : Boolean)
 
 val identifierHelp = "Handle or other supported identifier under which you intend to post."
@@ -50,7 +52,7 @@ def auth( config : Config ) : ujson.Obj =
 
 def utf8IndexFor( s : String, si : Int ) : Int = s.substring(0,si).getBytes(java.nio.charset.StandardCharsets.UTF_8).length
 
-def urlFacets( text : String ) : ujson.Arr =
+def urlFacets( config : Config, session : ujson.Obj, text : String ) : mutable.ArrayBuffer[ujson.Value] =
   val buff = mutable.ArrayBuffer.empty[ujson.Value]
   val matches = UrlRegex.findAllMatchIn( text )
   matches.foreach: m =>
@@ -64,16 +66,38 @@ def urlFacets( text : String ) : ujson.Arr =
       val features = ujson.Arr( ujson.Obj( "$type" -> "app.bsky.richtext.facet#link", "uri" -> m.group(0) ) )
       ujson.Obj( "index" -> index, "features" -> features )
     buff += facet
-  ujson.Arr(buff)
+  buff
 
-def facets( text : String ) : ujson.Arr = urlFacets( text : String ) // maybe later i'll deal with mentions
+def mentionFacets( config : Config, session : ujson.Obj, text : String ) : mutable.ArrayBuffer[ujson.Value] =
+  val buff = mutable.ArrayBuffer.empty[ujson.Value]
+  val matches = MentionRegex.findAllMatchIn( text )
+  matches.foreach: m =>
+    val handle = m.group(1).substring(1)
+    try
+      val facet =
+        val index = ujson.Obj( "byteStart" -> utf8IndexFor(text, m.start(1)), "byteEnd" -> utf8IndexFor(text, m.end(1)) )
+        val features =
+          val resolveHandleEndpoint = pathJoin( config.serviceEndpoint, "/xrpc/com.atproto.identity.resolveHandle" )
+          val response = requests.get( resolveHandleEndpoint, params=Map("handle" -> handle), headers=Map("Content-Type"->"application/json") )
+          if config.verbose then System.err.println( pprint( response ) )
+          val responseMap = ujson.read( response.text() ).obj
+          val did = responseMap("did").str
+          ujson.Arr( ujson.Obj( "$type" -> "app.bsky.richtext.facet#mention", "did" -> did ) )
+        ujson.Obj( "index" -> index, "features" -> features )
+      buff += facet
+    catch
+      case rfe : requests.RequestFailedException =>
+        if config.verbose then System.err.println( s"Failed to lookup handle '${handle}'. Skipping. Error: ${rfe.response}" )
+  buff
+
+def facets( config : Config, session : ujson.Obj, text : String ) : ujson.Arr = ujson.Arr( urlFacets( config, session, text ) ++ mentionFacets( config, session, text) )
 
 // the return value will become the exit code of our script
 def post( config : Config, session : ujson.Obj ) : Int =
   val url = pathJoin( config.serviceEndpoint, "/xrpc/com.atproto.repo.createRecord" )
   val post =
     val lhm = upickle.core.LinkedHashMap.apply[String,ujson.Value]("$type" -> ujson.Str("app.bsky.feed.post") :: "text" -> ujson.Str(config.text) :: "createdAt" -> ujson.Str(ISO_INSTANT.format(Instant.now())) :: Nil )
-    val fs  = facets( config.text )
+    val fs  = facets( config, session, config.text )
     if fs.value.nonEmpty then lhm += ( "facets" -> fs )
     ujson.Obj(lhm)
   val headers             = Map (
