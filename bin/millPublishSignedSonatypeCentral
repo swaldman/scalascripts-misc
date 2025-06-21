@@ -31,11 +31,18 @@ if (gpgSigningKey == null) {
   System.exit(1)
 }
 
+val gpgPassphrase = new String( console.readPassword("Please enter GPG passphrase for signing: ") )
+
+
 // got some guidance from
 //   https://stackoverflow.com/questions/70534089/is-it-possible-to-export-a-gpg-private-key-without-passphrase-being-provided-in (extra command line args for headless passphrase)
 //   https://stackoverflow.com/questions/35292836/input-byte-array-has-incorrect-ending-byte-at-40 (need to trim the output of the base64 subprocess)
+//
+// but I wonder whether this whole thing can be skipped? it gets used to _reimport_ the key in the gpg keychain.
+// the key is already there, though, and we provide the passphrase to re-unlock it when we publish
+//
+// is this just a way of ensuring that the key we want is the default key (last imported) in the keychain?
 
-val gpgPassphrase = new String( console.readPassword("Please enter GPG passphrase for signing: ") )
 val gpgSecretKeyBase64 =
   os.proc("gpg", "--batch", "--pinentry-mode=loopback", "--yes", "--passphrase", gpgPassphrase, "--export-secret-key", "-a", gpgSigningKey)
     .pipeTo(os.proc("base64"))
