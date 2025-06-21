@@ -31,6 +31,9 @@ if (gpgSigningKey == null) {
   System.exit(1)
 }
 
+// got some guidance from
+//   https://stackoverflow.com/questions/70534089/is-it-possible-to-export-a-gpg-private-key-without-passphrase-being-provided-in (extra command line args for headless passphrase)
+//   https://stackoverflow.com/questions/35292836/input-byte-array-has-incorrect-ending-byte-at-40 (need to trim the output of the base64 subprocess)
 
 val gpgPassphrase = new String( console.readPassword("Please enter GPG passphrase for signing: ") )
 val gpgSecretKeyBase64 =
@@ -55,7 +58,7 @@ val commandResult =
         "MILL_SONATYPE_USERNAME" -> sonatypeUsername,
         "MILL_SONATYPE_PASSWORD" -> sonatypePassword,
         "MILL_PGP_SECRET_BASE64" -> gpgSecretKeyBase64,
-        "MILL_PGP_PASSPHRASE"    -> gpgPassphrase
+        "MILL_PGP_PASSPHRASE"    -> gpgPassphrase        // is this really necessary? we've already used the passphrase to unlock the secret key
       )
     )
 
