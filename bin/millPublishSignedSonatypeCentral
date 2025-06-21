@@ -1,0 +1,62 @@
+#!/usr/bin/env -S scala-cli shebang
+
+//> using scala "3.3.6"
+//> using dep "com.lihaoyi::os-lib:0.11.4"
+//> using dep "com.lihaoyi::pprint:0.9.0"
+
+// see https://mill-build.org/mill/scalalib/publishing.html#_publlishing_to_sonatype_maven_central
+// base64 command maybe should be switchable for different platforms
+
+// expects SONATYPE_USERNAME, SONATYPE_PASSWORD, and SONATYPE_GPG_SIGNING_KEY to be set prior to running!
+
+val console = System.console()
+if (console == null) {
+  System.err.println("Could not initialize system console. Exiting.")
+  System.exit(1)
+}
+
+val sonatypeUsername = System.getenv("SONATYPE_USERNAME")
+val sonatypePassword = System.getenv("SONATYPE_PASSWORD")
+val gpgSigningKey    = System.getenv("SONATYPE_GPG_SIGNING_KEY")
+if (sonatypeUsername == null) {
+  System.err.println(s"Environment variable 'SONATYPE_USERNAME' not set. Exiting.")
+  System.exit(1)
+}
+if (sonatypePassword == null) {
+  System.err.println(s"Environment variable 'SONATYPE_PASSWORD' not set. Exiting.")
+  System.exit(1)
+}
+if (gpgSigningKey == null) {
+  System.err.println(s"Environment variable 'SONATYPE_GPG_SIGNING_KEY' not set. Exiting.")
+  System.exit(1)
+}
+
+
+val gpgPassphrase = new String( console.readPassword("Please enter GPG passphrase for signing: ") )
+val gpgSecretKeyBase64 =
+  os.proc("gpg", "--batch", "--pinentry-mode=loopback", "--yes", "--passphrase", gpgPassphrase, "--export-secret-key", "-a", gpgSigningKey)
+    .pipeTo(os.proc("base64"))
+    .call()
+    .out
+    .text()
+    .trim()
+
+def fileExists( strpath : String ) = {
+  import java.nio.file.{Files,Path}
+  Files.exists( Path.of( strpath ) )
+}
+
+val millBinary = List("./mill","./millw").find( fileExists ).getOrElse("mill")
+
+val commandResult =
+  os.proc(millBinary, "mill.scalalib.SonatypeCentralPublishModule/")
+    .call(
+      env = Map(
+        "MILL_SONATYPE_USERNAME" -> sonatypeUsername,
+        "MILL_SONATYPE_PASSWORD" -> sonatypePassword,
+        "MILL_PGP_SECRET_BASE64" -> gpgSecretKeyBase64,
+        "MILL_PGP_PASSPHRASE"    -> gpgPassphrase
+      )
+    )
+
+pprint.pprintln(commandResult)
