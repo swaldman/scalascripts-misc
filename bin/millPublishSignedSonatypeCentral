@@ -8,6 +8,12 @@
 
 // expects SONATYPE_USERNAME, SONATYPE_PASSWORD, and SONATYPE_GPG_SIGNING_KEY to be set prior to running!
 
+/*
+ * This script is not safe to run on shared computers,
+ * as credentias are embedded in command-line argument
+ * and environment variables that can leak via 'ps', etc.
+ */
+
 val console = System.console()
 if (console == null) {
   System.err.println("Could not initialize system console. Exiting.")
