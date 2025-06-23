@@ -2,7 +2,6 @@
 
 //> using scala "3.3.6"
 //> using dep "com.lihaoyi::os-lib:0.11.4"
-//> using dep "com.lihaoyi::pprint:0.9.0"
 
 // see https://mill-build.org/mill/scalalib/publishing.html#_publlishing_to_sonatype_maven_central
 // base64 command maybe should be switchable for different platforms
@@ -33,40 +32,29 @@ if (gpgSigningKey == null) {
 
 val gpgPassphrase = new String( console.readPassword("Please enter GPG passphrase for signing: ") )
 
-
-// got some guidance from
-//   https://stackoverflow.com/questions/70534089/is-it-possible-to-export-a-gpg-private-key-without-passphrase-being-provided-in (extra command line args for headless passphrase)
-//   https://stackoverflow.com/questions/35292836/input-byte-array-has-incorrect-ending-byte-at-40 (need to trim the output of the base64 subprocess)
-//
-// but I wonder whether this whole thing can be skipped? it gets used to _reimport_ the key in the gpg keychain.
-// the key is already there, though, and we provide the passphrase to re-unlock it when we publish
-//
-// is this just a way of ensuring that the key we want is the default key (last imported) in the keychain?
-
-val gpgSecretKeyBase64 =
-  os.proc("gpg", "--batch", "--pinentry-mode=loopback", "--yes", "--passphrase", gpgPassphrase, "--export-secret-key", "-a", gpgSigningKey)
-    .pipeTo(os.proc("base64"))
-    .call()
-    .out
-    .text()
-    .trim()
-
 def fileExists( strpath : String ) = {
   import java.nio.file.{Files,Path}
   Files.exists( Path.of( strpath ) )
 }
 
+val gpgArgs = Seq(
+    s"--passphrase=${gpgPassphrase}",
+    s"--local-user=${gpgSigningKey}",
+    "--no-tty",
+    "--pinentry-mode",
+    "loopback",
+    "--batch",
+    "--yes",
+    "-a",
+    "-b"
+  ).mkString(",")
+
 val millBinary = List("./mill","./millw").find( fileExists ).getOrElse("mill")
 
 val commandResult =
-  os.proc(millBinary, "mill.scalalib.SonatypeCentralPublishModule/")
-    .call(
-      env = Map(
-        "MILL_SONATYPE_USERNAME" -> sonatypeUsername,
-        "MILL_SONATYPE_PASSWORD" -> sonatypePassword,
-        "MILL_PGP_SECRET_BASE64" -> gpgSecretKeyBase64,
-        "MILL_PGP_PASSPHRASE"    -> gpgPassphrase        // is this really necessary? we've already used the passphrase to unlock the secret key
-      )
-    )
+  os.proc(millBinary, "mill.scalalib.SonatypeCentralPublishModule/publishAll", "--username", sonatypeUsername, "--password", sonatypePassword, "--gpgArgs", gpgArgs, "--should-release", "false")
+    .call()
 
-pprint.pprintln(commandResult)
+// don't print, the command-line args are sensitive
+// NOTE THAT BOTH THESE AND ENVIRONMENT VARIABLES CAN LEAK THROUGH ps
+// println(commandResult)
