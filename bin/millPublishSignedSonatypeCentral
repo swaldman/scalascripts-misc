@@ -38,9 +38,10 @@ if (gpgSigningKey == null) {
 
 val gpgPassphrase = new String( console.readPassword("Please enter GPG passphrase for signing: ") )
 
-def fileExists( strpath : String ) = {
+def nondirectoryExecutableFileExists( strpath : String ) = {
   import java.nio.file.{Files,Path}
-  Files.exists( Path.of( strpath ) )
+  val p = Path.of( strpath )
+  Files.exists( p ) && !Files.isDirectory( p ) && Files.isExecutable( p )
 }
 
 val gpgArgs = Seq(
@@ -55,7 +56,7 @@ val gpgArgs = Seq(
     "-b"
   ).mkString(",")
 
-val millBinary = List("./mill","./millw").find( fileExists ).getOrElse("mill")
+val millBinary = List("./mill","./millw").find( nondirectoryExecutableFileExists ).getOrElse("mill")
 
 val commandResult =
   os.proc(millBinary, "mill.scalalib.SonatypeCentralPublishModule/publishAll", "--username", sonatypeUsername, "--password", sonatypePassword, "--gpgArgs", gpgArgs, "--should-release", "false")
