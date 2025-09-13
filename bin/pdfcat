@@ -1,6 +1,6 @@
 #!/usr/bin/env -S scala-cli shebang
 
-//> using scala "3.2.2"
+//> using scala "3.3.6"
 //> using lib "org.apache.pdfbox:pdfbox:2.0.28"
 
 import java.io.File
