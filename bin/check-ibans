@@ -1,0 +1,37 @@
+#!/usr/bin/env -S scala-cli shebang
+
+// see https://github.com/barend/java-iban
+
+//> using dep "nl.garvelink.oss:iban:1.15.0"
+//> using dep "com.lihaoyi::os-lib:0.11.5"
+
+import nl.garvelink.iban.*
+import scala.collection.IterableOnce
+
+def badIban( putative : String ) : Boolean =
+  try
+    IBAN.valueOf(putative)
+    false
+  catch
+    case iac : IllegalArgumentException => true
+
+def badIbans( ibans : Seq[String] ) : Seq[String] = ibans.filter( badIban )
+
+def usage() =
+  System.err.println("Usage: check-ibans <text-file-one-putative-iban-per-line>")
+  System.exit(1)
+
+if args.length != 1 then
+   usage()
+else
+  val file = os.Path( args(0), os.pwd )
+  val bad = badIbans( os.read.lines(file).map( _.trim ).filter( _.nonEmpty ) ) // we skip blank lines
+  if bad.isEmpty then
+    println("All IBANs validated.")
+  else
+    println("Bad IBANs:")
+    bad.foreach: b =>
+      println(s"    $b")
+
+
+
