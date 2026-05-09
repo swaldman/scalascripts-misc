@@ -3,11 +3,11 @@
 // inspired by Roy Tang, https://roytang.net/2021/11/mastodon-api-python/
 // with help from Chris Jones, https://chrisjones.io/articles/using-php-and-curl-to-post-media-to-the-mastodon-api/
 
-//> using scala "3.3.0"
+//> using scala "3.3.7"
 //> using dep "com.lihaoyi::requests:0.8.0"
 //> using dep "com.lihaoyi::upickle:3.1.2"
 //> using dep "com.lihaoyi::pprint:0.7.0"
-//> using dep "com.monovore::decline:2.4.1"
+//> using dep "com.monovore::decline:2.6.2"
 
 import java.io.{BufferedInputStream, InputStream}
 import java.net.{URL,URLEncoder}

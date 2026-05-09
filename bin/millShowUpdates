@@ -1,0 +1,42 @@
+#!/usr/bin/env -S scala-cli shebang
+
+//> using scala "3.3.7"
+//> using dep "com.lihaoyi::os-lib:0.11.8"
+//> using dep "com.monovore::decline:2.6.2"
+
+import com.monovore.decline.*
+
+def usage = "Usage: millShowUpdate [--meta-level=n]"
+
+val metaLevelOpt = Opts.option[Int]("meta-level", short="l", help="Meta-build level, if any. (Usually none or 1.)").orNone
+
+val command = Command(name="millShowUpdates", header="Shows updates to dependencies declared in a mill build.")(metaLevelOpt)
+
+def nondirectoryExecutableFileExists( strpath : String ) =
+  import java.nio.file.{Files,Path}
+  val p = Path.of( strpath )
+  Files.exists( p ) && !Files.isDirectory( p ) && Files.isExecutable( p )
+
+def doIt( metaLevel : Option[Int] ) : Int =
+  val millBinary = List("./mill","./millw").find( nondirectoryExecutableFileExists ).getOrElse("mill")
+
+  val shellable =
+    val protoshellable = List.newBuilder[String]
+    protoshellable += millBinary
+    metaLevel.foreach: ml =>
+      protoshellable += "--meta-level="+ml
+    protoshellable += "mill.scalalib.Dependency/showUpdates"
+    protoshellable.result()
+
+  val commandResult =
+    os.call(shellable, stdout=os.Inherit, stderr=os.Inherit, check=false)
+
+  commandResult.exitCode
+
+command.parse(args.toIndexedSeq, sys.env) match
+  case Left(help) =>
+    println(help)
+    System.exit(1)
+  case Right( mbMetaLevel ) =>
+    System.exit(doIt(mbMetaLevel))
+
