@@ -1,7 +1,7 @@
 #!/usr/bin/env -S scala-cli shebang
 
-//> using scala "3.3.6"
-//> using dep "com.lihaoyi::os-lib:0.11.4"
+//> using scala "3.3.7"
+//> using dep "com.lihaoyi::os-lib:0.11.8"
 
 // see https://mill-build.org/mill/scalalib/publishing.html#_publlishing_to_sonatype_maven_central
 // base64 command maybe should be switchable for different platforms
@@ -36,6 +36,7 @@ if (gpgSigningKey == null) {
   System.exit(1)
 }
 
+console.printf("NOTE: You may be required to enter the gpg passphrase twice, alas.\n");
 val gpgPassphrase = new String( console.readPassword("Please enter GPG passphrase for signing: ") )
 
 def nondirectoryExecutableFileExists( strpath : String ) = {
@@ -44,23 +45,23 @@ def nondirectoryExecutableFileExists( strpath : String ) = {
   Files.exists( p ) && !Files.isDirectory( p ) && Files.isExecutable( p )
 }
 
-val gpgArgs = Seq(
-    s"--passphrase=${gpgPassphrase}",
-    s"--local-user=${gpgSigningKey}",
-    "--no-tty",
-    "--pinentry-mode",
-    "loopback",
-    "--batch",
-    "--yes",
-    "-a",
-    "-b"
-  ).mkString(",")
-
 val millBinary = List("./mill","./millw").find( nondirectoryExecutableFileExists ).getOrElse("mill")
 
+val millPgpSecretBase64 =
+  val gpg = os.spawn(cmd = ("gpg", "--export-secret-keys", "--armor", gpgSigningKey + "!" /* no fuzzy key expansion */), stderr = os.Inherit)
+  val base64 = os.spawn(cmd = ("base64", "-w", "0"), stdin = gpg.stdout)
+  base64.stdout.trim()
+
+val millEnv = Map(
+  "MILL_PGP_PASSPHRASE"    -> gpgPassphrase,
+  "MILL_PGP_SECRET_BASE64" -> millPgpSecretBase64,
+  "MILL_SONATYPE_USERNAME" -> sonatypeUsername,
+  "MILL_SONATYPE_PASSWORD" -> sonatypePassword,
+)
+
 val commandResult =
-  os.proc(millBinary, "mill.scalalib.SonatypeCentralPublishModule/publishAll", "--username", sonatypeUsername, "--password", sonatypePassword, "--gpgArgs", gpgArgs, "--should-release", "false")
-    .call()
+  os.proc(millBinary, "mill.scalalib.SonatypeCentralPublishModule/publishAll", "--should-release", "false")
+    .call(env = millEnv)
 
 // don't print, the command-line args are sensitive
 // NOTE THAT BOTH THESE AND ENVIRONMENT VARIABLES CAN LEAK THROUGH ps
