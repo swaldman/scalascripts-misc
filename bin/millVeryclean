@@ -17,8 +17,12 @@ def carefulDeleteOut( putativeParent : os.Path ) =
 def touch( target : os.Path ) =
   target.toIO.setLastModified( System.currentTimeMillis() )
 
+val MillBuildFileNames = Set("build.sc","build.mill")
+
+def looksLikeMillBuildFile( p : os.Path ) = MillBuildFileNames(p.last)
+
 def touchAllMillBuildFiles( putativeParent : os.Path ) =
-  os.walk( putativeParent, skip = (p => !p.toString().endsWith("build.sc") ) ).foreach( touch )
+  os.walk( putativeParent, skip = (p => !looksLikeMillBuildFile(p)) ).foreach( touch )
 
 val wd = os.pwd
 carefulDeleteOut( wd )
