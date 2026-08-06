@@ -1,14 +1,14 @@
 #!/usr/bin/env -S scala-cli shebang
 
-//> using scala "3.2.2"
-//> using lib "com.lihaoyi::cask:0.9.1"
-//> using lib "com.monovore::decline:2.4.1"
+//> using scala "3.3.8"
+//> using dep "com.lihaoyi::cask:0.9.1"
+//> using dep "com.monovore::decline:2.4.1"
 //> using option "-deprecation"
 
 import com.monovore.decline._
 import cats.syntax.all.catsSyntaxTuple3Semigroupal
 
-val host = Opts.option[String]("host", short = "h", metavar = "hostname or IP", help = "The host to bind to, serve from.").withDefault("localhost")
+val host = Opts.option[String]("host", short = "h", metavar = "hostname or IP", help = "The host to bind to, serve from.").withDefault("0.0.0.0")
 val port = Opts.option[Int]("port", short = "p", metavar = "portnum", help = "The port to serve from").withDefault(8080)
 val dir  = Opts.option[String]("dir", short = "d", metavar = "directory", help = "The directory to serve from.").withDefault(".")
 
