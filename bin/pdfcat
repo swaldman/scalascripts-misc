@@ -1,7 +1,7 @@
 #!/usr/bin/env -S scala-cli shebang
 
-//> using scala "3.3.6"
-//> using lib "org.apache.pdfbox:pdfbox:2.0.28"
+//> using scala "3.3.8"
+//> using lib "org.apache.pdfbox:pdfbox:2.0.37"
 
 import java.io.File
 import Console.{RESET,RED,GREEN,UNDERLINED}
