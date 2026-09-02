@@ -1,0 +1,58 @@
+#!/usr/bin/env -S scala-cli shebang
+
+//> using scala "3.3.8"
+//> using scalacOptions "-deprecation"
+//> using dep "com.lihaoyi::os-lib:0.11.8"
+
+import java.io.File
+import scala.util.Try
+import Console.{RESET,RED,GREEN,UNDERLINED}
+
+def usage = "Usage: mp4lastframe <video>.mp4 <destfile>.jpg"
+
+def twoArgs = args.length == 2
+def goodSuffixes = args(0).endsWith(".mp4") && { val fn = args(1); fn.endsWith(".jpg") || fn.endsWith(".jpeg") }
+
+def abort(why : String) = 
+  Console.err.println(s"${RESET}${RED}${UNDERLINED}ABORTED: ${why}${RESET}")
+  Console.err.println()
+  Console.err.println(usage)
+  System.exit(1)
+
+if !twoArgs || ! goodSuffixes then abort("mp4lastframe requires exactly two arguments, a video file ending in .mp4 and a destination file ending in .jpg or .jpeg.")
+
+val files = args.map(fn => new File(fn))
+
+def sourceFileExistsAndIsReadable = files.init.forall( f => f.exists() && f.canRead() )
+def destinationDoesNotExist       = !files.last.exists()
+
+val ffmpeg = "ffmpeg"
+
+def containsExecutableFfmpeg( p : os.Path ) : Boolean =
+   val file = p / ffmpeg
+   os.exists(p) && os.isDir(p) && os.exists(file) && os.isFile(file) && os.isExecutable(file)
+
+def pathToAbsoluteOsPaths(path : String) : Seq[os.Path] =
+  path.split(File.pathSeparator).toSeq
+    .map(dir => Try(os.Path(dir)).toOption)
+    .flatten
+
+def ffmpegIsExecutable : Boolean =
+  sys.env.get("PATH") match
+    case Some(path) =>
+      pathToAbsoluteOsPaths(path).map(containsExecutableFfmpeg).exists(identity)
+    case None =>
+      false
+
+if !sourceFileExistsAndIsReadable then abort("The source file does not exist or is not readable.")
+if !destinationDoesNotExist then abort(s"Destination file '${args.last}' already exists. Please delete to regenerate.")
+if !ffmpegIsExecutable then abort(s"ffmpeg is required, is not available on the PATH.")
+
+os.call(cmd=(ffmpeg,"-sseof","-3","-i",args(0),"-update","true","-q:v","2",args(1)))
+
+Console.err.println(s"${RESET}${GREEN}mp4 file '${args.last}' created.${RESET}")
+
+
+
+
+
